@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import './App.css'; // Import CSS file for styling
+import './app.css'; // Import CSS file for styling
 
 const ProductList = [
   { code: 'FL001', description: 'Rose', shipped: 0, waste: 0 },

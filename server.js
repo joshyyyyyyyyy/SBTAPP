@@ -1,58 +1,62 @@
-const http = require('http');
-const fs = require('fs');
+// server.js
+
+const express = require('express');
 const path = require('path');
-const { createServer } = require('http');
-const { readFile } = require('fs').promises;
-const { extname } = require('path');
-const { renderToString } = require('react-dom/server');
-const React = require('react');
+const bodyParser = require('body-parser');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
 
-const PORT = 3000;
+const app = express();
+const PORT = process.env.PORT || 3001;
+const SECRET_KEY = 'your_secret_key'; // Use a more secure key in production
 
-const server = createServer(async (req, res) => {
-    let filePath = '.' + req.url;
-    if (filePath === './') {
-        filePath = './public/index.html'; // Serve index.html from the public folder for root URL
-    }
+app.use(bodyParser.json());
+app.use(cors()); // Allow requests from your React app
 
-    const ext = extname(filePath);
-    const contentType = {
-        '.html': 'text/html',
-        '.css': 'text/css',
-        '.js': 'text/javascript',
-        '.json': 'application/json',
-        '.png': 'image/png',
-        '.jpg': 'image/jpg',
-        '.gif': 'image/gif',
-        '.svg': 'image/svg+xml',
-    }[ext] || 'application/octet-stream';
+const users = [
+  { id: 1, email: 'test@example.com', password: bcrypt.hashSync('password123', 8) }
+];
 
-    try {
-        const content = await readFile(filePath, 'utf-8');
-        res.writeHead(200, { 'Content-Type': contentType });
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, 'build')));
 
-        if (ext === '.jsx') {
-            // Render the JSX file
-            const Home = require(filePath.replace('.jsx', '')); // Import your Home component
-            const jsxContent = React.createElement(Home);
-            const html = renderToString(jsxContent);
-            res.end(html);
-        } else {
-            res.end(content);
-        }
-    } catch (err) {
-        if (err.code === 'ENOENT') {
-            // File not found
-            res.writeHead(404);
-            res.end('404 Not Found');
-        } else {
-            // Server error
-            res.writeHead(500);
-            res.end('500 Internal Server Error');
-        }
-    }
+app.post('/api/login', (req, res) => {
+  const { email, password } = req.body;
+
+  const user = users.find(user => user.email === email);
+  if (!user) {
+    return res.status(401).json({ message: 'Invalid email or password' });
+  }
+
+  const passwordIsValid = bcrypt.compareSync(password, user.password);
+  if (!passwordIsValid) {
+    return res.status(401).json({ message: 'Invalid email or password' });
+  }
+
+  const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: 86400 }); // 24 hours
+  res.status(200).json({ token });
 });
 
-server.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}/`);
+app.get('/api/verifyToken', (req, res) => {
+  const token = req.headers['x-access-token'];
+  if (!token) {
+    return res.status(403).json({ message: 'No token provided' });
+  }
+
+  jwt.verify(token, SECRET_KEY, (err, decoded) => {
+    if (err) {
+      return res.status(500).json({ message: 'Failed to authenticate token' });
+    }
+    res.status(200).json({ id: decoded.id });
+  });
+});
+
+// For all GET requests, send back index.html so that the React app can handle routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
